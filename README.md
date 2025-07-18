@@ -23,13 +23,13 @@ npm install ssslogger
 import { log } from "ssslogger";
 
 // Simple logging
-log.info("Server started");
-log.warn("High memory usage detected");
-log.error("Database connection failed");
+log.info("server_started");
+log.warn("high_memory_usage_detected");
+log.error("database_connection_failed");
 
 // Logging with additional data
-log.info("User logged in", { userId: 123, ip: "192.168.1.1" });
-log.error("API request failed", {
+log.info("user_logged_in", { userId: 123, ip: "192.168.1.1" });
+log.error("api_request_failed", {
   endpoint: "/api/users",
   statusCode: 500,
   error: new Error("Internal server error"),
@@ -97,7 +97,7 @@ All logs are structured JSON with the following format:
 ```json
 {
   "ts": "2024-03-25T12:00:00.000Z",
-  "msg": "User logged in",
+  "msg": "user_logged_in",
   "obj": {
     "userId": 123,
     "ip": "192.168.1.1"
@@ -113,13 +113,13 @@ All logs are structured JSON with the following format:
 import { log } from "ssslogger";
 
 // Application startup
-log.info("Application starting", {
+log.info("application_starting", {
   version: "1.0.0",
   environment: "production",
 });
 
 // Request logging
-log.info("HTTP request", {
+log.info("http_request", {
   method: "GET",
   url: "/api/users",
   duration: 150,
@@ -129,7 +129,7 @@ log.info("HTTP request", {
 try {
   // Some operation
 } catch (error) {
-  log.error("Operation failed", {
+  log.error("operation_failed", {
     operation: "user.create",
     error: error,
   });
