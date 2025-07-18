@@ -1,0 +1,44 @@
+{
+  "name": "ssslogger",
+  "version": "1.0.0",
+  "description": "A super simple structured JSON logger for Node.js and other platforms",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "logger",
+    "logging",
+    "json",
+    "structured",
+    "simple",
+    "minimal",
+    "typescript"
+  ],
+  "author": "Richard Hristov",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "serialize-error": "^11.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/richardhristov/ssslogger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/richardhristov/ssslogger/issues"
+  },
+  "homepage": "https://github.com/richardhristov/ssslogger#readme"
+}
