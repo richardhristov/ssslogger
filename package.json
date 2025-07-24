@@ -1,6 +1,6 @@
 {
   "name": "ssslogger",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A super simple structured JSON logger for Node.js and other platforms",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

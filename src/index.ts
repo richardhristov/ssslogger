@@ -20,9 +20,13 @@ function stringify(value: unknown) {
   );
 }
 
-function formatMessage(args: { msg: string; obj?: Record<string, unknown> }) {
+function formatMessage(args: {
+  ts: string;
+  msg: string;
+  obj?: Record<string, unknown>;
+}) {
   return stringify({
-    ts: new Date().toISOString(),
+    ts: args.ts,
     msg: args.msg,
     obj: args.obj,
   });
@@ -58,12 +62,13 @@ export function createLogger(
       if (levels.indexOf(args.level) < levels.indexOf(configuredLevel)) {
         return;
       }
+      const ts = new Date().toISOString();
       const entry: HookArgs = {
-        ts: new Date().toISOString(),
+        ts,
         level: args.level,
         msg: args.msg,
         obj: args.obj,
-        formatted: formatMessage({ msg: args.msg, obj: args.obj }),
+        formatted: formatMessage({ ts, msg: args.msg, obj: args.obj }),
       };
       // Execute all hooks – isolated so one failing hook doesn't break others.
       for (const hook of hooks) {
