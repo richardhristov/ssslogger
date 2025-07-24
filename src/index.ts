@@ -38,7 +38,7 @@ type HookArgs = {
   obj?: Record<string, unknown>;
   formatted: string;
 };
-export type LogHook = (args: HookArgs) => void;
+export type LogHook = (args: HookArgs) => void | Promise<void>;
 
 // biome-ignore lint/suspicious/noConsole: default console hook
 const consoleHook: LogHook = (args) => console[args.level](args.formatted);
