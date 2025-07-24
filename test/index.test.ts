@@ -150,6 +150,141 @@ describe('log', () => {
       expect.stringContaining('test message with bad object')
     );
   });
+
+  it('handles null values in objects', () => {
+    const objWithNull = {
+      stringValue: 'test',
+      nullValue: null,
+      nested: {
+        anotherNull: null,
+        validValue: 'valid',
+      },
+    };
+
+    log.info('test message with null values', objWithNull);
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('test message with null values')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('nullValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('anotherNull')
+    );
+  });
+
+  it('handles undefined values in objects', () => {
+    const objWithUndefined = {
+      stringValue: 'test',
+      undefinedValue: undefined,
+      nested: {
+        anotherUndefined: undefined,
+        validValue: 'valid',
+      },
+    };
+
+    log.info('test message with undefined values', objWithUndefined);
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('test message with undefined values')
+    );
+    // JSON.stringify omits undefined values, so they should not appear in output
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('stringValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('validValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.not.stringContaining('undefinedValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.not.stringContaining('anotherUndefined')
+    );
+  });
+
+  it('handles mixed null and undefined values', () => {
+    const mixedObj = {
+      nullValue: null,
+      undefinedValue: undefined,
+      validString: 'valid',
+      validNumber: 42,
+      nested: {
+        nullInNested: null,
+        undefinedInNested: undefined,
+        validNested: 'nested valid',
+      },
+    };
+
+    log.info('test message with mixed null/undefined', mixedObj);
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('test message with mixed null/undefined')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('nullValue')
+    );
+    // JSON.stringify omits undefined values, so they should not appear in output
+    expect(console.info).toHaveBeenCalledWith(
+      expect.not.stringContaining('undefinedValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('validString')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('validNumber')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('nullInNested')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.not.stringContaining('undefinedInNested')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('validNested')
+    );
+  });
+
+  it('handles deeply nested null and undefined values', () => {
+    const deeplyNested = {
+      level1: {
+        level2: {
+          level3: {
+            nullValue: null,
+            undefinedValue: undefined,
+            validValue: 'deeply nested',
+            deeper: {
+              level4: {
+                nullAtLevel4: null,
+                undefinedAtLevel4: undefined,
+              },
+            },
+          },
+        },
+      },
+    };
+
+    log.info('test message with deeply nested nulls/undefineds', deeplyNested);
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'test message with deeply nested nulls/undefineds'
+      )
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('nullValue')
+    );
+    // JSON.stringify omits undefined values, so they should not appear in output
+    expect(console.info).toHaveBeenCalledWith(
+      expect.not.stringContaining('undefinedValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('validValue')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining('nullAtLevel4')
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.not.stringContaining('undefinedAtLevel4')
+    );
+  });
 });
 
 describe('createLogger', () => {
@@ -445,6 +580,34 @@ describe('createLogger', () => {
 
     logger.info('test message');
 
+    expect(console.info).not.toHaveBeenCalled();
+  });
+
+  it('supports asynchronous hooks', () => {
+    const asyncHook = vi.fn().mockResolvedValue(undefined);
+    const logger = createLogger({ logger: 'test-logger', hooks: [asyncHook] });
+
+    logger.info('async hook message', { async: true });
+
+    expect(asyncHook).toHaveBeenCalledWith({
+      logger: 'test-logger',
+      ts: expectedTimestamp,
+      level: 'info',
+      msg: 'async hook message',
+      obj: { async: true },
+      formatted: JSON.stringify(
+        {
+          logger: 'test-logger',
+          ts: expectedTimestamp,
+          msg: 'async hook message',
+          obj: { async: true },
+        },
+        null,
+        2
+      ),
+    });
+
+    // Ensure default console hook is overridden
     expect(console.info).not.toHaveBeenCalled();
   });
 
