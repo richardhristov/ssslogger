@@ -6,7 +6,7 @@ A super simple structured JSON logger for Node.js with TypeScript support.
 
 - 🚀 **Lightweight**: Minimal dependencies, fast performance
 - 📝 **Structured JSON**: All logs are formatted as JSON for easy parsing
-- 🔧 **Configurable**: Set log levels and custom hooks
+- 🔧 **Configurable**: Set log levels, logger names, and custom hooks
 - 🛡️ **TypeScript**: Full TypeScript support with type definitions
 - 🔄 **Error Handling**: Graceful handling of circular references and errors
 - ⚡ **Zero Config**: Works out of the box with sensible defaults
@@ -59,6 +59,7 @@ Create a custom logger with specific configuration:
 import { createLogger } from "ssslogger";
 
 const logger = createLogger({
+  logger: "my-app", // Logger name for identification
   level: "info", // Only log info, warn, and error
   hooks: [customHook], // Custom logging hooks
 });
@@ -68,10 +69,31 @@ const logger = createLogger({
 
 ```typescript
 interface LoggerConfig {
+  logger: string; // Logger name (required)
   level?: "debug" | "info" | "warn" | "error"; // Default: 'debug'
   hooks?: LogHook[]; // Default: [consoleHook]
 }
 ```
+
+### Available Exports
+
+```typescript
+import { 
+  createLogger, 
+  consoleHook, 
+  type LogLevel, 
+  type LogHook, 
+  type LogHookArgs,
+  type Log 
+} from "ssslogger";
+```
+
+- `createLogger`: Function to create custom loggers
+- `consoleHook`: Default console logging hook
+- `LogLevel`: Type for log levels ('debug' | 'info' | 'warn' | 'error')
+- `LogHook`: Type for custom logging hooks
+- `LogHookArgs`: Type for hook arguments
+- `Log`: Type for logger instances
 
 ### Custom Hooks
 
@@ -86,6 +108,7 @@ const fileHook: LogHook = (args) => {
 };
 
 const logger = createLogger({
+  logger: "file-logger",
   hooks: [fileHook],
 });
 ```
@@ -96,6 +119,7 @@ All logs are structured JSON with the following format:
 
 ```json
 {
+  "logger": "my-app",
   "ts": "2024-03-25T12:00:00.000Z",
   "msg": "user_logged_in",
   "obj": {
@@ -136,16 +160,28 @@ try {
 }
 ```
 
-### Custom Logger with Different Levels
+### Custom Logger with Different Names and Levels
 
 ```typescript
 import { createLogger } from "ssslogger";
 
 // Production logger - only warnings and errors
-const prodLogger = createLogger({ level: "warn" });
+const prodLogger = createLogger({ 
+  logger: "prod-app",
+  level: "warn" 
+});
 
 // Development logger - all levels
-const devLogger = createLogger({ level: "debug" });
+const devLogger = createLogger({ 
+  logger: "dev-app",
+  level: "debug" 
+});
+
+// Database logger
+const dbLogger = createLogger({ 
+  logger: "database",
+  level: "info" 
+});
 
 // Use appropriate logger based on environment
 const logger = process.env.NODE_ENV === "production" ? prodLogger : devLogger;
@@ -170,8 +206,25 @@ const fileHook: LogHook = (args) => {
 };
 
 const logger = createLogger({
+  logger: "monitored-app",
   hooks: [monitoringHook, fileHook],
 });
+```
+
+### Multiple Named Loggers
+
+```typescript
+import { createLogger } from "ssslogger";
+
+// Create loggers for different parts of your application
+const apiLogger = createLogger({ logger: "api" });
+const dbLogger = createLogger({ logger: "database" });
+const authLogger = createLogger({ logger: "auth" });
+
+// Use them in different modules
+apiLogger.info("request_received", { method: "POST", path: "/users" });
+dbLogger.debug("query_executed", { sql: "SELECT * FROM users" });
+authLogger.warn("invalid_token", { userId: 123 });
 ```
 
 ## Error Handling

@@ -33,6 +33,7 @@ describe('log', () => {
     expect(console.debug).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'log',
           ts: expectedTimestamp,
           msg: 'test debug message',
           obj: undefined,
@@ -48,6 +49,7 @@ describe('log', () => {
     expect(console.info).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'log',
           ts: expectedTimestamp,
           msg: 'test info message',
           obj: undefined,
@@ -63,6 +65,7 @@ describe('log', () => {
     expect(console.warn).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'log',
           ts: expectedTimestamp,
           msg: 'test warn message',
           obj: undefined,
@@ -78,6 +81,7 @@ describe('log', () => {
     expect(console.error).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'log',
           ts: expectedTimestamp,
           msg: 'test error message',
           obj: undefined,
@@ -94,6 +98,7 @@ describe('log', () => {
     expect(console.info).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'log',
           ts: expectedTimestamp,
           msg: 'test message with object',
           obj: testObj,
@@ -174,7 +179,7 @@ describe('createLogger', () => {
   });
 
   it('creates logger with default settings', () => {
-    const logger = createLogger();
+    const logger = createLogger({ logger: 'test-logger' });
 
     logger.debug('debug message');
     logger.info('info message');
@@ -184,6 +189,7 @@ describe('createLogger', () => {
     expect(console.debug).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'debug message',
           obj: undefined,
@@ -195,6 +201,7 @@ describe('createLogger', () => {
     expect(console.info).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'info message',
           obj: undefined,
@@ -206,6 +213,7 @@ describe('createLogger', () => {
     expect(console.warn).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'warn message',
           obj: undefined,
@@ -217,6 +225,7 @@ describe('createLogger', () => {
     expect(console.error).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'error message',
           obj: undefined,
@@ -228,7 +237,7 @@ describe('createLogger', () => {
   });
 
   it('filters messages based on log level', () => {
-    const logger = createLogger({ level: 'warn' });
+    const logger = createLogger({ logger: 'test-logger', level: 'warn' });
 
     logger.debug('debug message');
     logger.info('info message');
@@ -240,6 +249,7 @@ describe('createLogger', () => {
     expect(console.warn).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'warn message',
           obj: undefined,
@@ -251,6 +261,7 @@ describe('createLogger', () => {
     expect(console.error).toHaveBeenCalledWith(
       JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'error message',
           obj: undefined,
@@ -263,17 +274,19 @@ describe('createLogger', () => {
 
   it('uses custom hooks', () => {
     const customHook = vi.fn();
-    const logger = createLogger({ hooks: [customHook] });
+    const logger = createLogger({ logger: 'test-logger', hooks: [customHook] });
 
     logger.info('test message', { key: 'value' });
 
     expect(customHook).toHaveBeenCalledWith({
+      logger: 'test-logger',
       ts: expectedTimestamp,
       level: 'info',
       msg: 'test message',
       obj: { key: 'value' },
       formatted: JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'test message',
           obj: { key: 'value' },
@@ -287,17 +300,22 @@ describe('createLogger', () => {
   it('uses multiple custom hooks', () => {
     const hook1 = vi.fn();
     const hook2 = vi.fn();
-    const logger = createLogger({ hooks: [hook1, hook2] });
+    const logger = createLogger({
+      logger: 'test-logger',
+      hooks: [hook1, hook2],
+    });
 
     logger.warn('test message');
 
     expect(hook1).toHaveBeenCalledWith({
+      logger: 'test-logger',
       ts: expectedTimestamp,
       level: 'warn',
       msg: 'test message',
       obj: undefined,
       formatted: JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'test message',
           obj: undefined,
@@ -307,12 +325,14 @@ describe('createLogger', () => {
       ),
     });
     expect(hook2).toHaveBeenCalledWith({
+      logger: 'test-logger',
       ts: expectedTimestamp,
       level: 'warn',
       msg: 'test message',
       obj: undefined,
       formatted: JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'test message',
           obj: undefined,
@@ -328,7 +348,10 @@ describe('createLogger', () => {
       throw new Error('hook error');
     };
     const workingHook = vi.fn();
-    const logger = createLogger({ hooks: [failingHook, workingHook] });
+    const logger = createLogger({
+      logger: 'test-logger',
+      hooks: [failingHook, workingHook],
+    });
 
     logger.info('test message');
 
@@ -339,12 +362,14 @@ describe('createLogger', () => {
       expect.stringContaining('hook error')
     );
     expect(workingHook).toHaveBeenCalledWith({
+      logger: 'test-logger',
       ts: expectedTimestamp,
       level: 'info',
       msg: 'test message',
       obj: undefined,
       formatted: JSON.stringify(
         {
+          logger: 'test-logger',
           ts: expectedTimestamp,
           msg: 'test message',
           obj: undefined,
@@ -356,7 +381,7 @@ describe('createLogger', () => {
   });
 
   it('handles all log levels correctly', () => {
-    const logger = createLogger();
+    const logger = createLogger({ logger: 'test-logger' });
 
     expect(logger).toHaveProperty('debug');
     expect(logger).toHaveProperty('info');
@@ -370,10 +395,16 @@ describe('createLogger', () => {
   });
 
   it('works with different log level configurations', () => {
-    const debugLogger = createLogger({ level: 'debug' });
-    const infoLogger = createLogger({ level: 'info' });
-    const warnLogger = createLogger({ level: 'warn' });
-    const errorLogger = createLogger({ level: 'error' });
+    const debugLogger = createLogger({
+      logger: 'debug-logger',
+      level: 'debug',
+    });
+    const infoLogger = createLogger({ logger: 'info-logger', level: 'info' });
+    const warnLogger = createLogger({ logger: 'warn-logger', level: 'warn' });
+    const errorLogger = createLogger({
+      logger: 'error-logger',
+      level: 'error',
+    });
 
     debugLogger.debug('debug message');
     expect(console.debug).toHaveBeenCalled();
@@ -393,12 +424,13 @@ describe('createLogger', () => {
 
   it('handles objects with errors in custom hooks', () => {
     const customHook = vi.fn();
-    const logger = createLogger({ hooks: [customHook] });
+    const logger = createLogger({ logger: 'test-logger', hooks: [customHook] });
     const testError = new Error('test error');
 
     logger.error('error message', { error: testError });
 
     expect(customHook).toHaveBeenCalledWith({
+      logger: 'test-logger',
       ts: expectedTimestamp,
       level: 'error',
       msg: 'error message',
@@ -409,10 +441,60 @@ describe('createLogger', () => {
   });
 
   it('creates logger with no hooks', () => {
-    const logger = createLogger({ hooks: [] });
+    const logger = createLogger({ logger: 'test-logger', hooks: [] });
 
     logger.info('test message');
 
     expect(console.info).not.toHaveBeenCalled();
+  });
+
+  it('creates logger with different names', () => {
+    const apiLogger = createLogger({ logger: 'api' });
+    const dbLogger = createLogger({ logger: 'database' });
+    const authLogger = createLogger({ logger: 'auth' });
+
+    apiLogger.info('api message');
+    dbLogger.info('db message');
+    authLogger.info('auth message');
+
+    expect(console.info).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify(
+        {
+          logger: 'api',
+          ts: expectedTimestamp,
+          msg: 'api message',
+          obj: undefined,
+        },
+        null,
+        2
+      )
+    );
+    expect(console.info).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify(
+        {
+          logger: 'database',
+          ts: expectedTimestamp,
+          msg: 'db message',
+          obj: undefined,
+        },
+        null,
+        2
+      )
+    );
+    expect(console.info).toHaveBeenNthCalledWith(
+      3,
+      JSON.stringify(
+        {
+          logger: 'auth',
+          ts: expectedTimestamp,
+          msg: 'auth message',
+          obj: undefined,
+        },
+        null,
+        2
+      )
+    );
   });
 });

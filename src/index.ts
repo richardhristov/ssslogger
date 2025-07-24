@@ -21,11 +21,13 @@ function stringify(value: unknown) {
 }
 
 function formatMessage(args: {
+  logger: string;
   ts: string;
   msg: string;
   obj?: Record<string, unknown>;
 }) {
   return stringify({
+    logger: args.logger,
     ts: args.ts,
     msg: args.msg,
     obj: args.obj,
@@ -33,25 +35,32 @@ function formatMessage(args: {
 }
 
 const levels = ['debug', 'info', 'warn', 'error'] as const;
-type LogLevel = (typeof levels)[number];
+export type LogLevel = (typeof levels)[number];
 
-type HookArgs = {
+export type LogHookArgs = {
+  logger: string;
   ts: string;
   level: LogLevel;
   msg: string;
   obj?: Record<string, unknown>;
   formatted: string;
 };
-export type LogHook = (args: HookArgs) => void | Promise<void>;
+export type LogHook = (args: LogHookArgs) => void | Promise<void>;
 
-// biome-ignore lint/suspicious/noConsole: default console hook
-const consoleHook: LogHook = (args) => console[args.level](args.formatted);
+export const consoleHook: LogHook = (args) =>
+  // biome-ignore lint/suspicious/noConsole: console hook
+  console[args.level](args.formatted);
 
-export function createLogger(
-  loggerArgs: { level?: LogLevel; hooks?: LogHook[] } = {}
-) {
-  const { level: configuredLevel = 'debug', hooks = [consoleHook] } =
-    loggerArgs;
+export function createLogger(loggerArgs: {
+  logger: string;
+  level?: LogLevel;
+  hooks?: LogHook[];
+}) {
+  const {
+    logger,
+    level: configuredLevel = 'debug',
+    hooks = [consoleHook],
+  } = loggerArgs;
   function logAtLevel(args: {
     level: LogLevel;
     msg: string;
@@ -63,12 +72,18 @@ export function createLogger(
         return;
       }
       const ts = new Date().toISOString();
-      const entry: HookArgs = {
+      const entry: LogHookArgs = {
+        logger,
         ts,
         level: args.level,
         msg: args.msg,
         obj: args.obj,
-        formatted: formatMessage({ ts, msg: args.msg, obj: args.obj }),
+        formatted: formatMessage({
+          logger,
+          ts,
+          msg: args.msg,
+          obj: args.obj,
+        }),
       };
       // Execute all hooks – isolated so one failing hook doesn't break others.
       for (const hook of hooks) {
@@ -113,6 +128,6 @@ export function createLogger(
   >;
 }
 
-export const log = createLogger();
+export const log = createLogger({ logger: 'log' });
 
 export type Log = typeof log;
