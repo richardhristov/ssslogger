@@ -1,22 +1,22 @@
-import { serializeError } from "serialize-error";
+import { serializeError } from 'serialize-error';
 
 function stringify(value: unknown) {
   const cache: unknown[] = [];
   return JSON.stringify(
     value,
-    (_: string, value: unknown) => {
-      if (value instanceof Error) {
-        return serializeError(value);
+    (_: string, replacerValue: unknown) => {
+      if (replacerValue instanceof Error) {
+        return serializeError(replacerValue);
       }
-      if (typeof value === "object" && value !== null) {
-        if (cache.includes(value)) {
+      if (typeof replacerValue === 'object' && replacerValue !== null) {
+        if (cache.includes(replacerValue)) {
           return;
         }
-        cache.push(value);
+        cache.push(replacerValue);
       }
-      return value;
+      return replacerValue;
     },
-    2,
+    2
   );
 }
 
@@ -28,7 +28,7 @@ function formatMessage(args: { msg: string; obj?: Record<string, unknown> }) {
   });
 }
 
-const levels = ["debug", "info", "warn", "error"] as const;
+const levels = ['debug', 'info', 'warn', 'error'] as const;
 type LogLevel = (typeof levels)[number];
 
 type HookArgs = {
@@ -40,15 +40,14 @@ type HookArgs = {
 };
 export type LogHook = (args: HookArgs) => void;
 
+// biome-ignore lint/suspicious/noConsole: default console hook
 const consoleHook: LogHook = (args) => console[args.level](args.formatted);
 
 export function createLogger(
-  args: {
-    level?: LogLevel;
-    hooks?: LogHook[];
-  } = {},
+  loggerArgs: { level?: LogLevel; hooks?: LogHook[] } = {}
 ) {
-  const { level: configuredLevel = "debug", hooks = [consoleHook] } = args;
+  const { level: configuredLevel = 'debug', hooks = [consoleHook] } =
+    loggerArgs;
   function logAtLevel(args: {
     level: LogLevel;
     msg: string;
@@ -71,26 +70,28 @@ export function createLogger(
         try {
           hook(entry);
         } catch (err) {
+          // biome-ignore lint/suspicious/noConsole: logger hook error
           console.error(
             stringify({
               ts: new Date().toISOString(),
-              msg: "logger_hook_error",
+              msg: 'logger_hook_error',
               err: serializeError(err),
               obj: { failedHook: hook.name, originalEntry: entry },
-            }),
+            })
           );
         }
       }
     } catch (err) {
+      // biome-ignore lint/suspicious/noConsole: logger error
       console.error(
         stringify({
           ts: new Date().toISOString(),
-          msg: "logger_error",
+          msg: 'logger_error',
           err: serializeError(err),
           obj: {
             msg: args.msg,
           },
-        }),
+        })
       );
     }
   }
@@ -100,7 +101,7 @@ export function createLogger(
       level,
       (msg: string, obj?: Record<string, unknown>) =>
         logAtLevel({ level, msg, obj }),
-    ]),
+    ])
   ) as Record<
     LogLevel,
     (message: string, obj?: Record<string, unknown>) => void
