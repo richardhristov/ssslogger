@@ -1,4 +1,4 @@
-import { serializeError } from 'serialize-error';
+import { serializeError } from './serialize-error';
 
 function stringify(value: unknown) {
   const cache: unknown[] = [];
