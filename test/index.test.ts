@@ -11,7 +11,7 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createLogger, type LogHook, log } from '../src/index';
+import { createLogger, type LogHook, log, serializeError } from '../src/index';
 
 // Test utilities
 function mockSystemTime(date = '2024-03-25T12:00:00.000Z') {
@@ -833,5 +833,39 @@ describe('createLogger', () => {
         })
       );
     }
+  });
+});
+
+describe('serializeError', () => {
+  it('serialises primitive values', () => {
+    const result = serializeError('oops');
+    expect(result).toEqual({ name: 'NonError', message: 'oops' });
+  });
+
+  it('copies enumerable properties from Error instances', () => {
+    const errWithCode = Object.assign(new Error('boom'), { code: 'E_BROKEN' });
+
+    const result = serializeError(errWithCode);
+    expect(result).toMatchObject({
+      name: 'Error',
+      message: 'boom',
+      code: 'E_BROKEN',
+    });
+  });
+
+  it('recursively serialises causes', () => {
+    const inner = new Error('inner');
+    const outer: Error & { cause?: unknown } = new Error('outer');
+    outer.cause = inner;
+
+    const result = serializeError(outer);
+    expect(result).toMatchObject({
+      name: 'Error',
+      message: 'outer',
+      cause: {
+        name: 'Error',
+        message: 'inner',
+      },
+    });
   });
 });
