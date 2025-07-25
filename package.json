@@ -34,7 +34,8 @@
     "typescript": "^5.0.0",
     "ultracite": "5.0.48",
     "vitest": "^3.2.4",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "axios": "^1.6.7"
   },
   "dependencies": {
     "serialize-error": "^11.0.0"

@@ -1,6 +1,31 @@
 /** biome-ignore-all lint/suspicious/noConsole: test */
+
+import http from 'node:http';
+import axios, { AxiosError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger, type LogHook, log } from '../src/index';
+
+class AxiosErrorWrapper {
+  private error: AxiosError;
+
+  constructor(error: AxiosError) {
+    this.error = error;
+  }
+
+  toJSON() {
+    return {
+      ...this.error.toJSON(),
+      responseData: this.error.response?.data,
+    };
+  }
+}
+
+axios.interceptors.response.use(undefined, (error) => {
+  if (error instanceof AxiosError) {
+    return Promise.reject(new AxiosErrorWrapper(error));
+  }
+  return Promise.reject(error);
+});
 
 describe('log', () => {
   const mockDate = new Date('2024-03-25T12:00:00.000Z');
@@ -283,6 +308,34 @@ describe('log', () => {
     );
     expect(console.info).toHaveBeenCalledWith(
       expect.not.stringContaining('undefinedAtLevel4')
+    );
+  });
+
+  it('logs axios response data for axios errors', async () => {
+    vi.useRealTimers();
+
+    const server = http.createServer((_req, res) => {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ message: 'Internal Server Error' }));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const { port } = server.address() as { port: number };
+
+    try {
+      await axios.get(`http://localhost:${port}`);
+    } catch (error) {
+      log.error('axios error', { error });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('axios error')
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Internal Server Error')
     );
   });
 });
