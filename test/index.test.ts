@@ -2,8 +2,57 @@
 
 import http from 'node:http';
 import axios, { AxiosError } from 'axios';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { createLogger, type LogHook, log } from '../src/index';
+
+// Test utilities
+function mockSystemTime(date = '2024-03-25T12:00:00.000Z') {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(date));
+  return new Date(date).toISOString();
+}
+
+function setupConsoleSpies() {
+  const spies = {
+    debug: vi.spyOn(console, 'debug').mockImplementation(() => {
+      return;
+    }),
+    info: vi.spyOn(console, 'info').mockImplementation(() => {
+      return;
+    }),
+    warn: vi.spyOn(console, 'warn').mockImplementation(() => {
+      return;
+    }),
+    error: vi.spyOn(console, 'error').mockImplementation(() => {
+      return;
+    }),
+  };
+
+  return {
+    spies,
+    reset: () => {
+      for (const spy of Object.values(spies)) {
+        spy.mockClear();
+      }
+    },
+    restore: () => {
+      for (const spy of Object.values(spies)) {
+        spy.mockRestore();
+      }
+    },
+  };
+}
+
+const formatExpected = (obj: Record<string, unknown>) =>
+  JSON.stringify(obj, null, 2);
 
 // Regex patterns for timestamp matching
 const TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -31,117 +80,64 @@ axios.interceptors.response.use(undefined, (error) => {
 });
 
 describe('log', () => {
-  const mockDate = new Date('2024-03-25T12:00:00.000Z');
-  const expectedTimestamp = mockDate.toISOString();
+  let consoleSpies: ReturnType<typeof setupConsoleSpies>;
+  let expectedTimestamp: string;
+
+  beforeAll(() => {
+    expectedTimestamp = mockSystemTime();
+    consoleSpies = setupConsoleSpies();
+  });
 
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(mockDate);
-    vi.spyOn(console, 'debug').mockImplementation(() => {
-      return;
-    });
-    vi.spyOn(console, 'info').mockImplementation(() => {
-      return;
-    });
-    vi.spyOn(console, 'warn').mockImplementation(() => {
-      return;
-    });
-    vi.spyOn(console, 'error').mockImplementation(() => {
-      return;
-    });
+    consoleSpies.reset();
   });
 
-  afterEach(() => {
+  afterAll(() => {
     vi.useRealTimers();
-    vi.restoreAllMocks();
+    consoleSpies.restore();
   });
 
-  it('logs debug messages', () => {
-    log.debug('test debug message');
-    expect(console.debug).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
+  // Parameterized tests for different log levels
+  describe.each<{
+    level: 'debug' | 'info' | 'warn' | 'error';
+    method: keyof Console;
+  }>([
+    { level: 'debug', method: 'debug' },
+    { level: 'info', method: 'info' },
+    { level: 'warn', method: 'warn' },
+    { level: 'error', method: 'error' },
+  ])('$level level', ({ level, method }) => {
+    it(`logs ${level} messages`, () => {
+      log[level](`test ${level} message`);
+      expect(consoleSpies.spies[method]).toHaveBeenCalledWith(
+        formatExpected({
           logger: 'log',
           ts: expectedTimestamp,
-          msg: 'test debug message',
+          msg: `test ${level} message`,
           obj: undefined,
-        },
-        null,
-        2
-      )
-    );
-  });
+        })
+      );
+    });
 
-  it('logs info messages', () => {
-    log.info('test info message');
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
+    it(`logs ${level} messages with objects`, () => {
+      const testObj = { key: 'value' };
+      log[level](`test ${level} message with object`, testObj);
+      expect(consoleSpies.spies[method]).toHaveBeenCalledWith(
+        formatExpected({
           logger: 'log',
           ts: expectedTimestamp,
-          msg: 'test info message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
-    );
-  });
-
-  it('logs warn messages', () => {
-    log.warn('test warn message');
-    expect(console.warn).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test warn message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
-    );
-  });
-
-  it('logs error messages', () => {
-    log.error('test error message');
-    expect(console.error).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test error message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
-    );
-  });
-
-  it('logs messages with objects', () => {
-    const testObj = { key: 'value' };
-    log.info('test message with object', testObj);
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test message with object',
+          msg: `test ${level} message with object`,
           obj: testObj,
-        },
-        null,
-        2
-      )
-    );
+        })
+      );
+    });
   });
 
   it('handles errors in objects', () => {
     const testError = new Error('test error');
     log.info('test message with error', { error: testError });
 
-    const actualCall = vi.mocked(console.info).mock.calls[0][0];
+    const actualCall = consoleSpies.spies.info.mock.calls[0][0];
     const parsed = JSON.parse(actualCall as string);
 
     expect(parsed).toEqual({
@@ -167,20 +163,16 @@ describe('log', () => {
     circularObj.self = circularObj;
 
     log.info('test message with circular reference', circularObj);
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test message with circular reference',
-          obj: {
-            key: 'value',
-            self: undefined, // Circular reference gets omitted
-          },
+    expect(consoleSpies.spies.info).toHaveBeenCalledWith(
+      formatExpected({
+        logger: 'log',
+        ts: expectedTimestamp,
+        msg: 'test message with circular reference',
+        obj: {
+          key: 'value',
+          self: undefined, // Circular reference gets omitted
         },
-        null,
-        2
-      )
+      })
     );
   });
 
@@ -193,7 +185,7 @@ describe('log', () => {
 
     log.info('test message with bad object', badObj);
 
-    const actualCall = vi.mocked(console.error).mock.calls[0][0];
+    const actualCall = consoleSpies.spies.error.mock.calls[0][0];
     const parsed = JSON.parse(actualCall as string);
 
     expect(parsed).toEqual({
@@ -210,143 +202,107 @@ describe('log', () => {
     });
   });
 
-  it('handles null values in objects', () => {
-    const objWithNull = {
-      stringValue: 'test',
-      nullValue: null,
-      nested: {
-        anotherNull: null,
-        validValue: 'valid',
+  // Parameterized tests for null/undefined handling
+  describe.each<{
+    name: string;
+    obj: Record<string, unknown>;
+    expected: Record<string, unknown>;
+  }>([
+    {
+      name: 'null values',
+      obj: {
+        stringValue: 'test',
+        nullValue: null,
+        nested: { anotherNull: null, validValue: 'valid' },
       },
-    };
-
-    log.info('test message with null values', objWithNull);
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test message with null values',
-          obj: objWithNull,
-        },
-        null,
-        2
-      )
-    );
-  });
-
-  it('handles undefined values in objects', () => {
-    const objWithUndefined = {
-      stringValue: 'test',
-      undefinedValue: undefined,
-      nested: {
-        anotherUndefined: undefined,
-        validValue: 'valid',
+      expected: {
+        stringValue: 'test',
+        nullValue: null,
+        nested: { anotherNull: null, validValue: 'valid' },
       },
-    };
-
-    log.info('test message with undefined values', objWithUndefined);
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test message with undefined values',
-          obj: {
-            stringValue: 'test',
-            nested: {
-              validValue: 'valid',
-            },
-          },
-        },
-        null,
-        2
-      )
-    );
-  });
-
-  it('handles mixed null and undefined values', () => {
-    const mixedObj = {
-      nullValue: null,
-      undefinedValue: undefined,
-      validString: 'valid',
-      validNumber: 42,
-      nested: {
-        nullInNested: null,
-        undefinedInNested: undefined,
-        validNested: 'nested valid',
+    },
+    {
+      name: 'undefined values',
+      obj: {
+        stringValue: 'test',
+        undefinedValue: undefined,
+        nested: { anotherUndefined: undefined, validValue: 'valid' },
       },
-    };
-
-    log.info('test message with mixed null/undefined', mixedObj);
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test message with mixed null/undefined',
-          obj: {
-            nullValue: null,
-            validString: 'valid',
-            validNumber: 42,
-            nested: {
-              nullInNested: null,
-              validNested: 'nested valid',
-            },
-          },
-        },
-        null,
-        2
-      )
-    );
-  });
-
-  it('handles deeply nested null and undefined values', () => {
-    const deeplyNested = {
-      level1: {
-        level2: {
-          level3: {
-            nullValue: null,
-            undefinedValue: undefined,
-            validValue: 'deeply nested',
-            deeper: {
-              level4: {
-                nullAtLevel4: null,
-                undefinedAtLevel4: undefined,
-              },
-            },
-          },
+      expected: {
+        stringValue: 'test',
+        nested: { validValue: 'valid' },
+      },
+    },
+    {
+      name: 'mixed null and undefined values',
+      obj: {
+        nullValue: null,
+        undefinedValue: undefined,
+        validString: 'valid',
+        validNumber: 42,
+        nested: {
+          nullInNested: null,
+          undefinedInNested: undefined,
+          validNested: 'nested valid',
         },
       },
-    };
-
-    log.info('test message with deeply nested nulls/undefineds', deeplyNested);
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'log',
-          ts: expectedTimestamp,
-          msg: 'test message with deeply nested nulls/undefineds',
-          obj: {
-            level1: {
-              level2: {
-                level3: {
-                  nullValue: null,
-                  validValue: 'deeply nested',
-                  deeper: {
-                    level4: {
-                      nullAtLevel4: null,
-                    },
-                  },
+      expected: {
+        nullValue: null,
+        validString: 'valid',
+        validNumber: 42,
+        nested: {
+          nullInNested: null,
+          validNested: 'nested valid',
+        },
+      },
+    },
+    {
+      name: 'deeply nested null and undefined values',
+      obj: {
+        level1: {
+          level2: {
+            level3: {
+              nullValue: null,
+              undefinedValue: undefined,
+              validValue: 'deeply nested',
+              deeper: {
+                level4: {
+                  nullAtLevel4: null,
+                  undefinedAtLevel4: undefined,
                 },
               },
             },
           },
         },
-        null,
-        2
-      )
-    );
+      },
+      expected: {
+        level1: {
+          level2: {
+            level3: {
+              nullValue: null,
+              validValue: 'deeply nested',
+              deeper: {
+                level4: {
+                  nullAtLevel4: null,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  ])('handles $name', ({ name, obj, expected }) => {
+    it(`handles ${name}`, () => {
+      log.info(`test message with ${name}`, obj);
+      expect(consoleSpies.spies.info).toHaveBeenCalledWith(
+        formatExpected({
+          logger: 'log',
+          ts: expectedTimestamp,
+          msg: `test message with ${name}`,
+          obj: expected,
+        })
+      );
+    });
   });
 
   it('logs axios response data for axios errors', async () => {
@@ -369,7 +325,7 @@ describe('log', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 
-    const actualCall = vi.mocked(console.error).mock.calls[0][0];
+    const actualCall = consoleSpies.spies.error.mock.calls[0][0];
     const parsed = JSON.parse(actualCall as string);
 
     expect(parsed.logger).toBe('log');
@@ -386,32 +342,90 @@ describe('log', () => {
       'AxiosError: Request failed with status code 500'
     );
   });
+
+  it('maintains log entry order', () => {
+    log.debug('first message');
+    log.info('second message');
+    log.warn('third message');
+    log.error('fourth message');
+
+    const debugCall = JSON.parse(
+      consoleSpies.spies.debug.mock.calls[0][0] as string
+    );
+    const infoCall = JSON.parse(
+      consoleSpies.spies.info.mock.calls[0][0] as string
+    );
+    const warnCall = JSON.parse(
+      consoleSpies.spies.warn.mock.calls[0][0] as string
+    );
+    const errorCall = JSON.parse(
+      consoleSpies.spies.error.mock.calls[0][0] as string
+    );
+
+    expect(debugCall).toMatchObject({
+      logger: 'log',
+      msg: 'first message',
+    });
+    expect(debugCall.ts).toMatch(TIMESTAMP_REGEX);
+
+    expect(infoCall).toMatchObject({
+      logger: 'log',
+      msg: 'second message',
+    });
+    expect(infoCall.ts).toMatch(TIMESTAMP_REGEX);
+
+    expect(warnCall).toMatchObject({
+      logger: 'log',
+      msg: 'third message',
+    });
+    expect(warnCall.ts).toMatch(TIMESTAMP_REGEX);
+
+    expect(errorCall).toMatchObject({
+      logger: 'log',
+      msg: 'fourth message',
+    });
+    expect(errorCall.ts).toMatch(TIMESTAMP_REGEX);
+  });
+
+  it('handles concurrent logging without interleaving', async () => {
+    const promises = Array.from({ length: 10 }, (_, i) =>
+      Promise.resolve().then(() => log.info(`concurrent message ${i}`))
+    );
+
+    await Promise.all(promises);
+
+    expect(consoleSpies.spies.info).toHaveBeenCalledTimes(10);
+
+    // Verify all messages were logged
+    for (let i = 0; i < 10; i++) {
+      const actualCall = consoleSpies.spies.info.mock.calls[i][0];
+      const parsed = JSON.parse(actualCall as string);
+
+      expect(parsed).toMatchObject({
+        logger: 'log',
+        msg: `concurrent message ${i}`,
+      });
+      expect(parsed.ts).toMatch(TIMESTAMP_REGEX);
+    }
+  });
 });
 
 describe('createLogger', () => {
-  const mockDate = new Date('2024-03-25T12:00:00.000Z');
-  const expectedTimestamp = mockDate.toISOString();
+  let consoleSpies: ReturnType<typeof setupConsoleSpies>;
+  let expectedTimestamp: string;
 
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(mockDate);
-    vi.spyOn(console, 'debug').mockImplementation(() => {
-      return;
-    });
-    vi.spyOn(console, 'info').mockImplementation(() => {
-      return;
-    });
-    vi.spyOn(console, 'warn').mockImplementation(() => {
-      return;
-    });
-    vi.spyOn(console, 'error').mockImplementation(() => {
-      return;
-    });
+  beforeAll(() => {
+    expectedTimestamp = mockSystemTime();
+    consoleSpies = setupConsoleSpies();
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    consoleSpies.reset();
+  });
+
+  afterAll(() => {
     vi.useRealTimers();
-    vi.restoreAllMocks();
+    consoleSpies.restore();
   });
 
   it('creates logger with default settings', () => {
@@ -422,90 +436,82 @@ describe('createLogger', () => {
     logger.warn('warn message');
     logger.error('error message');
 
-    expect(console.debug).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'debug message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+    expect(consoleSpies.spies.debug).toHaveBeenCalledWith(
+      formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'debug message',
+        obj: undefined,
+      })
     );
-    expect(console.info).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'info message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+    expect(consoleSpies.spies.info).toHaveBeenCalledWith(
+      formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'info message',
+        obj: undefined,
+      })
     );
-    expect(console.warn).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'warn message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+    expect(consoleSpies.spies.warn).toHaveBeenCalledWith(
+      formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'warn message',
+        obj: undefined,
+      })
     );
-    expect(console.error).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'error message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+    expect(consoleSpies.spies.error).toHaveBeenCalledWith(
+      formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'error message',
+        obj: undefined,
+      })
     );
   });
 
-  it('filters messages based on log level', () => {
-    const logger = createLogger({ logger: 'test-logger', level: 'warn' });
+  // Parameterized tests for log level filtering
+  describe.each<{
+    level: 'debug' | 'info' | 'warn' | 'error';
+    shouldLog: string[];
+  }>([
+    { level: 'debug', shouldLog: ['debug', 'info', 'warn', 'error'] },
+    { level: 'info', shouldLog: ['info', 'warn', 'error'] },
+    { level: 'warn', shouldLog: ['warn', 'error'] },
+    { level: 'error', shouldLog: ['error'] },
+  ])('filters messages based on log level $level', ({ level, shouldLog }) => {
+    it(`filters messages based on log level ${level}`, () => {
+      const logger = createLogger({ logger: 'test-logger', level });
 
-    logger.debug('debug message');
-    logger.info('info message');
-    logger.warn('warn message');
-    logger.error('error message');
+      logger.debug('debug message');
+      logger.info('info message');
+      logger.warn('warn message');
+      logger.error('error message');
 
-    expect(console.debug).not.toHaveBeenCalled();
-    expect(console.info).not.toHaveBeenCalled();
-    expect(console.warn).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'warn message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
-    );
-    expect(console.error).toHaveBeenCalledWith(
-      JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'error message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
-    );
+      if (shouldLog.includes('debug')) {
+        expect(consoleSpies.spies.debug).toHaveBeenCalled();
+      } else {
+        expect(consoleSpies.spies.debug).not.toHaveBeenCalled();
+      }
+
+      if (shouldLog.includes('info')) {
+        expect(consoleSpies.spies.info).toHaveBeenCalled();
+      } else {
+        expect(consoleSpies.spies.info).not.toHaveBeenCalled();
+      }
+
+      if (shouldLog.includes('warn')) {
+        expect(consoleSpies.spies.warn).toHaveBeenCalled();
+      } else {
+        expect(consoleSpies.spies.warn).not.toHaveBeenCalled();
+      }
+
+      if (shouldLog.includes('error')) {
+        expect(consoleSpies.spies.error).toHaveBeenCalled();
+      } else {
+        expect(consoleSpies.spies.error).not.toHaveBeenCalled();
+      }
+    });
   });
 
   it('uses custom hooks', () => {
@@ -520,16 +526,12 @@ describe('createLogger', () => {
       level: 'info',
       msg: 'test message',
       obj: { key: 'value' },
-      formatted: JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'test message',
-          obj: { key: 'value' },
-        },
-        null,
-        2
-      ),
+      formatted: formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'test message',
+        obj: { key: 'value' },
+      }),
     });
   });
 
@@ -543,40 +545,22 @@ describe('createLogger', () => {
 
     logger.warn('test message');
 
-    expect(hook1).toHaveBeenCalledWith({
+    const expectedCall = {
       logger: 'test-logger',
       ts: expectedTimestamp,
       level: 'warn',
       msg: 'test message',
       obj: undefined,
-      formatted: JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'test message',
-          obj: undefined,
-        },
-        null,
-        2
-      ),
-    });
-    expect(hook2).toHaveBeenCalledWith({
-      logger: 'test-logger',
-      ts: expectedTimestamp,
-      level: 'warn',
-      msg: 'test message',
-      obj: undefined,
-      formatted: JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'test message',
-          obj: undefined,
-        },
-        null,
-        2
-      ),
-    });
+      formatted: formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'test message',
+        obj: undefined,
+      }),
+    };
+
+    expect(hook1).toHaveBeenCalledWith(expectedCall);
+    expect(hook2).toHaveBeenCalledWith(expectedCall);
   });
 
   it('handles hook errors gracefully', () => {
@@ -591,7 +575,7 @@ describe('createLogger', () => {
 
     logger.info('test message');
 
-    const actualCall = vi.mocked(console.error).mock.calls[0][0];
+    const actualCall = consoleSpies.spies.error.mock.calls[0][0];
     const parsed = JSON.parse(actualCall as string);
 
     expect(parsed).toEqual({
@@ -610,16 +594,12 @@ describe('createLogger', () => {
           level: 'info',
           msg: 'test message',
           obj: undefined,
-          formatted: JSON.stringify(
-            {
-              logger: 'test-logger',
-              ts: expectedTimestamp,
-              msg: 'test message',
-              obj: undefined,
-            },
-            null,
-            2
-          ),
+          formatted: formatExpected({
+            logger: 'test-logger',
+            ts: expectedTimestamp,
+            msg: 'test message',
+            obj: undefined,
+          }),
         },
       },
     });
@@ -629,17 +609,56 @@ describe('createLogger', () => {
       level: 'info',
       msg: 'test message',
       obj: undefined,
-      formatted: JSON.stringify(
-        {
+      formatted: formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'test message',
+        obj: undefined,
+      }),
+    });
+  });
+
+  it('handles hooks that return rejecting promises', async () => {
+    const rejectingHook: LogHook = () => {
+      throw new Error('async hook error');
+    };
+    const workingHook = vi.fn();
+    const logger = createLogger({
+      logger: 'test-logger',
+      hooks: [rejectingHook, workingHook],
+    });
+
+    await logger.info('test message');
+
+    const actualCall = consoleSpies.spies.error.mock.calls[0][0];
+    const parsed = JSON.parse(actualCall as string);
+
+    expect(parsed).toEqual({
+      ts: expect.stringMatching(TIMESTAMP_REGEX),
+      msg: 'logger_hook_error',
+      err: {
+        name: 'Error',
+        message: 'async hook error',
+        stack: expect.stringContaining('Error: async hook error'),
+      },
+      obj: {
+        failedHook: 'rejectingHook',
+        originalEntry: {
           logger: 'test-logger',
           ts: expectedTimestamp,
+          level: 'info',
           msg: 'test message',
           obj: undefined,
+          formatted: formatExpected({
+            logger: 'test-logger',
+            ts: expectedTimestamp,
+            msg: 'test message',
+            obj: undefined,
+          }),
         },
-        null,
-        2
-      ),
+      },
     });
+    expect(workingHook).toHaveBeenCalled();
   });
 
   it('handles all log levels correctly', () => {
@@ -654,34 +673,6 @@ describe('createLogger', () => {
     expect(typeof logger.info).toBe('function');
     expect(typeof logger.warn).toBe('function');
     expect(typeof logger.error).toBe('function');
-  });
-
-  it('works with different log level configurations', () => {
-    const debugLogger = createLogger({
-      logger: 'debug-logger',
-      level: 'debug',
-    });
-    const infoLogger = createLogger({ logger: 'info-logger', level: 'info' });
-    const warnLogger = createLogger({ logger: 'warn-logger', level: 'warn' });
-    const errorLogger = createLogger({
-      logger: 'error-logger',
-      level: 'error',
-    });
-
-    debugLogger.debug('debug message');
-    expect(console.debug).toHaveBeenCalled();
-
-    vi.clearAllMocks();
-    infoLogger.debug('debug message');
-    expect(console.debug).not.toHaveBeenCalled();
-
-    vi.clearAllMocks();
-    warnLogger.info('info message');
-    expect(console.info).not.toHaveBeenCalled();
-
-    vi.clearAllMocks();
-    errorLogger.warn('warn message');
-    expect(console.warn).not.toHaveBeenCalled();
   });
 
   it('handles objects with errors in custom hooks', () => {
@@ -713,14 +704,14 @@ describe('createLogger', () => {
 
     logger.info('test message');
 
-    expect(console.info).not.toHaveBeenCalled();
+    expect(consoleSpies.spies.info).not.toHaveBeenCalled();
   });
 
-  it('supports asynchronous hooks', () => {
+  it('supports asynchronous hooks', async () => {
     const asyncHook = vi.fn().mockResolvedValue(undefined);
     const logger = createLogger({ logger: 'test-logger', hooks: [asyncHook] });
 
-    logger.info('async hook message', { async: true });
+    await logger.info('async hook message', { async: true });
 
     expect(asyncHook).toHaveBeenCalledWith({
       logger: 'test-logger',
@@ -728,23 +719,40 @@ describe('createLogger', () => {
       level: 'info',
       msg: 'async hook message',
       obj: { async: true },
-      formatted: JSON.stringify(
-        {
-          logger: 'test-logger',
-          ts: expectedTimestamp,
-          msg: 'async hook message',
-          obj: { async: true },
-        },
-        null,
-        2
-      ),
+      formatted: formatExpected({
+        logger: 'test-logger',
+        ts: expectedTimestamp,
+        msg: 'async hook message',
+        obj: { async: true },
+      }),
     });
 
     // Ensure default console hook is overridden
-    expect(console.info).not.toHaveBeenCalled();
+    expect(consoleSpies.spies.info).not.toHaveBeenCalled();
   });
 
-  it('creates logger with different names', () => {
+  // Parameterized tests for different logger names
+  describe.each<{ name: string; loggerName: string }>([
+    { name: 'api', loggerName: 'api' },
+    { name: 'database', loggerName: 'database' },
+    { name: 'auth', loggerName: 'auth' },
+  ])('creates logger with name $name', ({ name, loggerName }) => {
+    it(`creates logger with name ${name}`, () => {
+      const logger = createLogger({ logger: loggerName });
+      logger.info(`${name} message`);
+
+      expect(consoleSpies.spies.info).toHaveBeenCalledWith(
+        formatExpected({
+          logger: loggerName,
+          ts: expectedTimestamp,
+          msg: `${name} message`,
+          obj: undefined,
+        })
+      );
+    });
+  });
+
+  it('creates multiple loggers with different names', () => {
     const apiLogger = createLogger({ logger: 'api' });
     const dbLogger = createLogger({ logger: 'database' });
     const authLogger = createLogger({ logger: 'auth' });
@@ -753,44 +761,77 @@ describe('createLogger', () => {
     dbLogger.info('db message');
     authLogger.info('auth message');
 
-    expect(console.info).toHaveBeenNthCalledWith(
+    expect(consoleSpies.spies.info).toHaveBeenNthCalledWith(
       1,
-      JSON.stringify(
-        {
-          logger: 'api',
-          ts: expectedTimestamp,
-          msg: 'api message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+      formatExpected({
+        logger: 'api',
+        ts: expectedTimestamp,
+        msg: 'api message',
+        obj: undefined,
+      })
     );
-    expect(console.info).toHaveBeenNthCalledWith(
+    expect(consoleSpies.spies.info).toHaveBeenNthCalledWith(
       2,
-      JSON.stringify(
-        {
-          logger: 'database',
-          ts: expectedTimestamp,
-          msg: 'db message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+      formatExpected({
+        logger: 'database',
+        ts: expectedTimestamp,
+        msg: 'db message',
+        obj: undefined,
+      })
     );
-    expect(console.info).toHaveBeenNthCalledWith(
+    expect(consoleSpies.spies.info).toHaveBeenNthCalledWith(
       3,
-      JSON.stringify(
-        {
-          logger: 'auth',
-          ts: expectedTimestamp,
-          msg: 'auth message',
-          obj: undefined,
-        },
-        null,
-        2
-      )
+      formatExpected({
+        logger: 'auth',
+        ts: expectedTimestamp,
+        msg: 'auth message',
+        obj: undefined,
+      })
     );
+  });
+
+  it('handles concurrent logging with multiple loggers', async () => {
+    const logger1 = createLogger({ logger: 'logger1' });
+    const logger2 = createLogger({ logger: 'logger2' });
+
+    const promises = [
+      ...Array.from({ length: 5 }, (_, i) =>
+        Promise.resolve().then(() => logger1.info(`logger1 message ${i}`))
+      ),
+      ...Array.from({ length: 5 }, (_, i) =>
+        Promise.resolve().then(() => logger2.warn(`logger2 message ${i}`))
+      ),
+    ];
+
+    await Promise.all(promises);
+
+    expect(consoleSpies.spies.info).toHaveBeenCalledTimes(5);
+    expect(consoleSpies.spies.warn).toHaveBeenCalledTimes(5);
+
+    // Verify logger1 messages
+    for (let i = 0; i < 5; i++) {
+      expect(consoleSpies.spies.info).toHaveBeenNthCalledWith(
+        i + 1,
+        formatExpected({
+          logger: 'logger1',
+          ts: expectedTimestamp,
+          msg: `logger1 message ${i}`,
+          obj: undefined,
+        })
+      );
+    }
+
+    // Verify logger2 messages
+    for (let i = 0; i < 5; i++) {
+      expect(consoleSpies.spies.warn).toHaveBeenNthCalledWith(
+        i + 1,
+        formatExpected({
+          logger: 'logger2',
+          ts: expectedTimestamp,
+          msg: `logger2 message ${i}`,
+          obj: undefined,
+        })
+      );
+    }
   });
 });
