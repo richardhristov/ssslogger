@@ -5,6 +5,9 @@ import axios, { AxiosError } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger, type LogHook, log } from '../src/index';
 
+// Regex patterns for timestamp matching
+const TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 class AxiosErrorWrapper {
   private error: AxiosError;
 
@@ -137,12 +140,22 @@ describe('log', () => {
   it('handles errors in objects', () => {
     const testError = new Error('test error');
     log.info('test message with error', { error: testError });
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('test message with error')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('test error')
-    );
+
+    const actualCall = vi.mocked(console.info).mock.calls[0][0];
+    const parsed = JSON.parse(actualCall as string);
+
+    expect(parsed).toEqual({
+      logger: 'log',
+      ts: expectedTimestamp,
+      msg: 'test message with error',
+      obj: {
+        error: {
+          name: 'Error',
+          message: 'test error',
+          stack: expect.stringContaining('Error: test error'),
+        },
+      },
+    });
   });
 
   it('handles circular references', () => {
@@ -155,9 +168,20 @@ describe('log', () => {
 
     log.info('test message with circular reference', circularObj);
     expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('test message with circular reference')
+      JSON.stringify(
+        {
+          logger: 'log',
+          ts: expectedTimestamp,
+          msg: 'test message with circular reference',
+          obj: {
+            key: 'value',
+            self: undefined, // Circular reference gets omitted
+          },
+        },
+        null,
+        2
+      )
     );
-    expect(console.info).toHaveBeenCalledWith(expect.stringContaining('value'));
   });
 
   it('handles logger errors gracefully', () => {
@@ -168,12 +192,22 @@ describe('log', () => {
     };
 
     log.info('test message with bad object', badObj);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('logger_error')
-    );
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('test message with bad object')
-    );
+
+    const actualCall = vi.mocked(console.error).mock.calls[0][0];
+    const parsed = JSON.parse(actualCall as string);
+
+    expect(parsed).toEqual({
+      ts: expect.stringMatching(TIMESTAMP_REGEX),
+      msg: 'logger_error',
+      err: {
+        name: 'Error',
+        message: 'test logger error',
+        stack: expect.stringContaining('Error: test logger error'),
+      },
+      obj: {
+        msg: 'test message with bad object',
+      },
+    });
   });
 
   it('handles null values in objects', () => {
@@ -188,13 +222,16 @@ describe('log', () => {
 
     log.info('test message with null values', objWithNull);
     expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('test message with null values')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('nullValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('anotherNull')
+      JSON.stringify(
+        {
+          logger: 'log',
+          ts: expectedTimestamp,
+          msg: 'test message with null values',
+          obj: objWithNull,
+        },
+        null,
+        2
+      )
     );
   });
 
@@ -210,20 +247,21 @@ describe('log', () => {
 
     log.info('test message with undefined values', objWithUndefined);
     expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('test message with undefined values')
-    );
-    // JSON.stringify omits undefined values, so they should not appear in output
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('stringValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('validValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.not.stringContaining('undefinedValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.not.stringContaining('anotherUndefined')
+      JSON.stringify(
+        {
+          logger: 'log',
+          ts: expectedTimestamp,
+          msg: 'test message with undefined values',
+          obj: {
+            stringValue: 'test',
+            nested: {
+              validValue: 'valid',
+            },
+          },
+        },
+        null,
+        2
+      )
     );
   });
 
@@ -242,29 +280,24 @@ describe('log', () => {
 
     log.info('test message with mixed null/undefined', mixedObj);
     expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('test message with mixed null/undefined')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('nullValue')
-    );
-    // JSON.stringify omits undefined values, so they should not appear in output
-    expect(console.info).toHaveBeenCalledWith(
-      expect.not.stringContaining('undefinedValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('validString')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('validNumber')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('nullInNested')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.not.stringContaining('undefinedInNested')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('validNested')
+      JSON.stringify(
+        {
+          logger: 'log',
+          ts: expectedTimestamp,
+          msg: 'test message with mixed null/undefined',
+          obj: {
+            nullValue: null,
+            validString: 'valid',
+            validNumber: 42,
+            nested: {
+              nullInNested: null,
+              validNested: 'nested valid',
+            },
+          },
+        },
+        null,
+        2
+      )
     );
   });
 
@@ -289,25 +322,30 @@ describe('log', () => {
 
     log.info('test message with deeply nested nulls/undefineds', deeplyNested);
     expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'test message with deeply nested nulls/undefineds'
+      JSON.stringify(
+        {
+          logger: 'log',
+          ts: expectedTimestamp,
+          msg: 'test message with deeply nested nulls/undefineds',
+          obj: {
+            level1: {
+              level2: {
+                level3: {
+                  nullValue: null,
+                  validValue: 'deeply nested',
+                  deeper: {
+                    level4: {
+                      nullAtLevel4: null,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        null,
+        2
       )
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('nullValue')
-    );
-    // JSON.stringify omits undefined values, so they should not appear in output
-    expect(console.info).toHaveBeenCalledWith(
-      expect.not.stringContaining('undefinedValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('validValue')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.stringContaining('nullAtLevel4')
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      expect.not.stringContaining('undefinedAtLevel4')
     );
   });
 
@@ -331,11 +369,21 @@ describe('log', () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('axios error')
+    const actualCall = vi.mocked(console.error).mock.calls[0][0];
+    const parsed = JSON.parse(actualCall as string);
+
+    expect(parsed.logger).toBe('log');
+    expect(parsed.ts).toMatch(TIMESTAMP_REGEX);
+    expect(parsed.msg).toBe('axios error');
+    expect(parsed.obj.error.name).toBe('AxiosError');
+    expect(parsed.obj.error.message).toBe(
+      'Request failed with status code 500'
     );
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('Internal Server Error')
+    expect(parsed.obj.error.responseData).toEqual({
+      message: 'Internal Server Error',
+    });
+    expect(parsed.obj.error.stack).toContain(
+      'AxiosError: Request failed with status code 500'
     );
   });
 });
@@ -543,12 +591,38 @@ describe('createLogger', () => {
 
     logger.info('test message');
 
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('logger_hook_error')
-    );
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('hook error')
-    );
+    const actualCall = vi.mocked(console.error).mock.calls[0][0];
+    const parsed = JSON.parse(actualCall as string);
+
+    expect(parsed).toEqual({
+      ts: expect.stringMatching(TIMESTAMP_REGEX),
+      msg: 'logger_hook_error',
+      err: {
+        name: 'Error',
+        message: 'hook error',
+        stack: expect.stringContaining('Error: hook error'),
+      },
+      obj: {
+        failedHook: 'failingHook', // Function name is available
+        originalEntry: {
+          logger: 'test-logger',
+          ts: expectedTimestamp,
+          level: 'info',
+          msg: 'test message',
+          obj: undefined,
+          formatted: JSON.stringify(
+            {
+              logger: 'test-logger',
+              ts: expectedTimestamp,
+              msg: 'test message',
+              obj: undefined,
+            },
+            null,
+            2
+          ),
+        },
+      },
+    });
     expect(workingHook).toHaveBeenCalledWith({
       logger: 'test-logger',
       ts: expectedTimestamp,
@@ -617,15 +691,21 @@ describe('createLogger', () => {
 
     logger.error('error message', { error: testError });
 
-    expect(customHook).toHaveBeenCalledWith({
-      logger: 'test-logger',
-      ts: expectedTimestamp,
-      level: 'error',
-      msg: 'error message',
-      obj: { error: testError },
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      formatted: expect.stringContaining('error message'),
-    });
+    const actualCall = customHook.mock.calls[0][0];
+
+    expect(actualCall.logger).toBe('test-logger');
+    expect(actualCall.ts).toBe(expectedTimestamp);
+    expect(actualCall.level).toBe('error');
+    expect(actualCall.msg).toBe('error message');
+    expect(actualCall.obj).toEqual({ error: testError });
+
+    const formattedParsed = JSON.parse(actualCall.formatted);
+    expect(formattedParsed.logger).toBe('test-logger');
+    expect(formattedParsed.ts).toBe(expectedTimestamp);
+    expect(formattedParsed.msg).toBe('error message');
+    expect(formattedParsed.obj.error.name).toBe('Error');
+    expect(formattedParsed.obj.error.message).toBe('test error');
+    expect(formattedParsed.obj.error.stack).toContain('Error: test error');
   });
 
   it('creates logger with no hooks', () => {
